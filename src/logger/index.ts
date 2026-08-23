@@ -5,6 +5,7 @@ const CONST_REGEX = /^(.*?)(const\s*)?([aA-zZ0-9]+)(\s*=\s*(async\s*)?\(.*\)\s*=
 const HOOKS_REGEX = /^(\s*)(const\s*)([aA-zZ0-9]+)(\s*=\s*use.*\(.*\s*{)/;
 const EFFECT_REGEX = /^(\s*)(useEffect\(\(\).*{)/;
 const INVALID_REGEX = /^(\s*)((if\s*)|(for\s*)|(switch\s*)|(while\s*)|(do\s*))(.*)\s*{.*/;
+const VALID_REGEXES = [FUNCTION_REGEX, CONST_REGEX, HOOKS_REGEX, EFFECT_REGEX];
 
 const OPEN_BRACKET_REGEX = /{/g;
 const CLOSED_BRACKET_REGEX = /}/g;
@@ -21,20 +22,18 @@ export async function LogMessage() {
         return null;
     }
 
-    const selection = editor.selections[0];
+	const { document, selections } = editor;
+    const [selection] = selections;
     if (!selection || selection.isEmpty) {
         showWarningMessage('No text selected!');
         return null;
     }
 
-    const document = editor.document;
     const selectedText = document.getText(selection).trim();
     const selectedTextLineNumber = selection.active.line;
     const logMessageLineNumber = selectedTextLineNumber + 1;
     const position = new Position(logMessageLineNumber, 0);
 
-    const logMessageLine = document.lineAt(logMessageLineNumber);
-    const indentation = logMessageLine.text.substring(0, logMessageLine.firstNonWhitespaceCharacterIndex);
 
     await editor.edit((editBuilder) => { editBuilder.insert(position, CreateLogMessage()); });
 
@@ -48,6 +47,8 @@ export async function LogMessage() {
 
         const { outputTerminal, logFunction, quote, color, bgColor, fontSize } = getSettings();
 
+		const indentation = GetIndentation();
+
         const options = `'color: ${color}${bgColor ? `; background: ${bgColor}` : ''}${fontSize ? `; font-size: ${fontSize}px` : ''}'`;
         const logMessage = `${indentation}${outputTerminal}.${logFunction}(${quote}%c📝${GetFunction()}:${quote}, ${options}, ${formattedSelectedVar});`;
 
@@ -56,14 +57,20 @@ export async function LogMessage() {
 
     function GetFunction() {
         let lineNumber = selectedTextLineNumber;
+        while (--lineNumber >= 0) {
+            const lineText = document.lineAt(lineNumber).text;
+            if (hasFunctionName(lineText) && !inOtherFunction())
+                return getFunctionName(lineText);
+        }
+
+        return document.fileName.split('\\').pop();
+
 
         function hasFunctionName(lineText: string) {
             const isInvalid = INVALID_REGEX.test(lineText);
-            const isFunction = FUNCTION_REGEX.test(lineText);
-            const isConst = CONST_REGEX.test(lineText);
-            const isHook = HOOKS_REGEX.test(lineText);
-            const isEffect = EFFECT_REGEX.test(lineText);
-            return !isInvalid && (isFunction || isConst || isHook || isEffect);
+			if (isInvalid)
+				return false;
+			return VALID_REGEXES.some(regex => regex.test(lineText));
         }
 
         function inOtherFunction() {
@@ -107,15 +114,17 @@ export async function LogMessage() {
 
             return 'N/A';
         }
-
-        while (--lineNumber >= 0) {
-            const lineText = document.lineAt(lineNumber).text;
-            if (hasFunctionName(lineText) && !inOtherFunction())
-                return getFunctionName(lineText);
-        }
-
-        return document.fileName.split('\\').pop();
     }
+
+	function GetIndentation() {
+
+		return [getIndentation(logMessageLineNumber), getIndentation(selectedTextLineNumber)].reduce((a, b) => a.length > b.length ? a : b);
+
+		function getIndentation(lineNumber: number) {
+			const line = document.lineAt(lineNumber);
+			return line.text.substring(0, line.firstNonWhitespaceCharacterIndex);
+		}
+	}
 }
 
 function getSettings() {
@@ -124,10 +133,10 @@ function getSettings() {
 }
 
 interface Settings {
-    /**The font color of the logged message.*/
+    /**The background color of the logged message.*/
     bgColor: string;
 
-    /**The background color of the logged message.*/
+    /**The font color of the logged message.*/
     color: string;
 
     /**The font size of the logged message.*/

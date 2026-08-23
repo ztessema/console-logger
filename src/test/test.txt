@@ -1,59 +1,59 @@
 // @ts-nocheck
 
 // FUNCTIONS
-function test1() {
+function test1(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-export function test2() {
+export function test2(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-async function test3() {
+async function test3(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-export async function test4() {
+export async function test4(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-test5() {
+test5(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-private test6() {
+private test6(exampleParameter: number) {
     const exampleVariable = true;
 }
 
-public test7() {
+public test7(exampleParameter: number) {
     const exampleVariable = true;
 }
 
 
 // CONST
-const test8 = () => {
+const test8 = (exampleParameter: number) => {
     const exampleVariable = true;
 };
 
-export const test9 =  () => {
+export const test9 =  (exampleParameter: number) => {
     const exampleVariable = true;
 };
 
-const test10 = async () => {
+const test10 = async (exampleParameter: number) => {
     const exampleVariable = true;
 };
 
-export const test11 = async () => {
+export const test11 = async (exampleParameter: number) => {
     const exampleVariable = true;
 };
 
-test12 = () => {
+test12 = (exampleParameter: number) => {
     const exampleVariable = true;
 };
 
 
 // HOOKS
-const test13 = useCallback(() => {
+const test13 = useCallback((exampleParameter: number) => {
     const exampleVariable = true;
 }, []);
 
@@ -67,7 +67,7 @@ useEffect(() => {
 
 // INVALID
 function test15() {
-    
+
     if (true) {
         const exampleVariable = true;
     }
@@ -89,6 +89,9 @@ function test15() {
     } while (i < 5);
 }
 
-function doThis() {
-
+function notThis() {
+	const exampleVariable1 = true;
+	function thisOne() {
+		const exampleVariable2 = true;
+	}
 }
