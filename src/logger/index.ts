@@ -122,7 +122,10 @@ export async function LogMessage() {
 
 		function getIndentation(lineNumber: number) {
 			const line = document.lineAt(lineNumber);
-			return line.text.substring(0, line.firstNonWhitespaceCharacterIndex);
+			const text = line.text.substring(0, line.firstNonWhitespaceCharacterIndex);
+			const tabSize = typeof editor?.options.tabSize === 'number' ? editor.options.tabSize : 4;
+			const replacement = Array.from({ length: tabSize }, v => ' ').join('');
+			return text.replaceAll('\t', replacement);
 		}
 	}
 }
