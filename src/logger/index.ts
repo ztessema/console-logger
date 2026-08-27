@@ -22,22 +22,23 @@ export async function LogMessage() {
         return null;
     }
 
-	const { document, selections } = editor;
+	const { document, selections, options } = editor;
     const [selection] = selections;
     if (!selection || selection.isEmpty) {
         showWarningMessage('No text selected!');
         return null;
     }
 
+	const { indentSize, insertSpaces } = options;
     const selectedText = document.getText(selection).trim();
     const selectedTextLineNumber = selection.active.line;
     const logMessageLineNumber = selectedTextLineNumber + 1;
     const position = new Position(logMessageLineNumber, 0);
 
+    await editor.edit((editBuilder) => { editBuilder.insert(position, createLogMessage()); });
 
-    await editor.edit((editBuilder) => { editBuilder.insert(position, CreateLogMessage()); });
 
-    function CreateLogMessage() {
+    function createLogMessage() {
 
         const addNewLine = logMessageLineNumber === document.lineCount;
 
@@ -46,88 +47,91 @@ export async function LogMessage() {
         const formattedSelectedVar = `{ ${alias !== selectedText ? `${alias}: ${selectedText}` : selectedText} }`;
 
         const { outputTerminal, logFunction, quote, color, bgColor, fontSize } = getSettings();
-
-		const indentation = GetIndentation();
+		const indentation = getIndentation();
+		const functionName = getFunction();
 
         const options = `'color: ${color}${bgColor ? `; background: ${bgColor}` : ''}${fontSize ? `; font-size: ${fontSize}px` : ''}'`;
-        const logMessage = `${indentation}${outputTerminal}.${logFunction}(${quote}%c📝${GetFunction()}:${quote}, ${options}, ${formattedSelectedVar});`;
+        const logMessage = `${indentation}${outputTerminal}.${logFunction}(${quote}%c📝${functionName}:${quote}, ${options}, ${formattedSelectedVar});`;
 
         return addNewLine ? `\n${logMessage}` : `${logMessage}\n`;
-    }
-
-    function GetFunction() {
-        let lineNumber = selectedTextLineNumber;
-        while (--lineNumber >= 0) {
-            const lineText = document.lineAt(lineNumber).text;
-            if (hasFunctionName(lineText) && !inOtherFunction())
-                return getFunctionName(lineText);
-        }
-
-        return document.fileName.split('\\').pop();
 
 
-        function hasFunctionName(lineText: string) {
-            const isInvalid = INVALID_REGEX.test(lineText);
-			if (isInvalid)
+		function getFunction() {
+			let lineNumber = logMessageLineNumber;
+			while (--lineNumber >= 0) {
+				const lineText = document.lineAt(lineNumber).text;
+				if (hasFunctionName(lineText) && !inOtherFunction())
+					return getFunctionName(lineText);
+			}
+
+			return document.fileName.split('\\').pop();
+
+
+			function hasFunctionName(lineText: string) {
+				const isInvalid = INVALID_REGEX.test(lineText);
+				if (isInvalid)
+					return false;
+				return VALID_REGEXES.some(regex => regex.test(lineText));
+			}
+
+			function inOtherFunction() {
+				let closingBracketLineNumber = lineNumber;
+				let openBrackets = 0, closedBrackets = 0;
+				while (closingBracketLineNumber < document.lineCount) {
+					const closingBracketLineText = document.lineAt(closingBracketLineNumber).text;
+					openBrackets += closingBracketLineText.match(OPEN_BRACKET_REGEX)?.length ?? 0;
+					closedBrackets += closingBracketLineText.match(CLOSED_BRACKET_REGEX)?.length ?? 0;
+
+					if (openBrackets === closedBrackets)
+						return selectedTextLineNumber > closingBracketLineNumber;
+
+					closingBracketLineNumber++;
+				}
 				return false;
-			return VALID_REGEXES.some(regex => regex.test(lineText));
-        }
+			}
 
-        function inOtherFunction() {
-            let closingBracketLineNumber = lineNumber;
-            let openBrackets = 0, closedBrackets = 0;
-            while (closingBracketLineNumber < document.lineCount) {
-                const closingBracketLineText = document.lineAt(closingBracketLineNumber).text;
-                openBrackets += closingBracketLineText.match(OPEN_BRACKET_REGEX)?.length ?? 0;
-                closedBrackets += closingBracketLineText.match(CLOSED_BRACKET_REGEX)?.length ?? 0;
+			function getFunctionName(lineText: string) {
 
-                if (openBrackets === closedBrackets)
-                    return selectedTextLineNumber > closingBracketLineNumber;
+				function getDependencies() {
+					let dependenciesLineNumber = lineNumber;
+					while (dependenciesLineNumber < document.lineCount) {
+						const dependenciesLineText = document.lineAt(dependenciesLineNumber).text;
+						const dependencies = dependenciesLineText.match(DEPENDENCIES_REGEX);
 
-                closingBracketLineNumber++;
-            }
-            return false;
-        }
+						if (dependencies) return dependencies[3];
 
-        function getFunctionName(lineText: string) {
+						dependenciesLineNumber++;
+					}
+					return 'N/A';
+				}
 
-            function getDependencies() {
-                let dependenciesLineNumber = lineNumber;
-                while (dependenciesLineNumber < document.lineCount) {
-                    const dependenciesLineText = document.lineAt(dependenciesLineNumber).text;
-                    const dependencies = dependenciesLineText.match(DEPENDENCIES_REGEX);
+				let match = lineText.match(FUNCTION_REGEX) ?? lineText.match(CONST_REGEX) ?? lineText.match(HOOKS_REGEX);
+				if (match)
+					return match[3];
 
-                    if (dependencies) return dependencies[3];
+				const eMatch = lineText.match(EFFECT_REGEX)?.[0];
+				if (eMatch)
+					return `useEffect - [${getDependencies()}]`;
 
-                    dependenciesLineNumber++;
-                }
-                return 'N/A';
-            }
-
-            let match = lineText.match(FUNCTION_REGEX) ?? lineText.match(CONST_REGEX) ?? lineText.match(HOOKS_REGEX);
-            if (match)
-                return match[3];
-
-            const eMatch = lineText.match(EFFECT_REGEX)?.[0];
-            if (eMatch)
-                return `useEffect - [${getDependencies()}]`;
-
-            return 'N/A';
-        }
-    }
-
-	function GetIndentation() {
-
-		return [getIndentation(logMessageLineNumber), getIndentation(selectedTextLineNumber)].reduce((a, b) => a.length > b.length ? a : b);
-
-		function getIndentation(lineNumber: number) {
-			const line = document.lineAt(lineNumber);
-			const text = line.text.substring(0, line.firstNonWhitespaceCharacterIndex);
-			const tabSize = typeof editor?.options.tabSize === 'number' ? editor.options.tabSize : 4;
-			const replacement = Array.from({ length: tabSize }, v => ' ').join('');
-			return text.replaceAll('\t', replacement);
+				return 'N/A';
+			}
 		}
-	}
+
+		function getIndentation() {
+
+			return [getLineIndentation(logMessageLineNumber), getLineIndentation(selectedTextLineNumber)].reduce((a, b) => a.length > b.length ? a : b);
+
+			function getLineIndentation(lineNumber: number) {
+				const line = document.lineAt(lineNumber);
+				const text = line.text.substring(0, line.firstNonWhitespaceCharacterIndex);
+				const tabSize = typeof indentSize === 'number' ? indentSize : 4;
+				const indentation = Array.from({ length: tabSize }, () => ' ').join('');
+				if (insertSpaces)
+					return text.replaceAll('\t', indentation);
+				return text.replaceAll(indentation, '\t');
+			}
+		}
+    }
 }
 
 function getSettings() {
